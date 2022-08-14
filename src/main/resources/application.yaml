@@ -1,0 +1,30 @@
+mdms:
+  events:
+    #api: H6xxxxxMSI
+    #secret: olxxxxxxwXIJ
+    #bootstrapServer: pkc-xxxxx.aws.confluent.cloud:9092
+    #own kafka
+    api: OxxxxxJZ
+    secret: 3KvExxxxxxxewsv7zsr
+    bootstrapServer: pkc-xxxxxxx.aws.confluent.cloud:9092
+spring.cloud:
+  function.definition: consumer;producer
+  stream:
+    kafka:
+      binder:
+        brokers: ${mdms.events.bootstrapServer}
+        configuration:
+          message.max.bytes: 4194304
+          security.protocol: SASL_SSL
+          sasl.mechanism: PLAIN
+          sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${mdms.events.api}' password='${mdms.events.secret}';
+          ssl.endpoint.identification.algorithm: https
+          replicationFactor: 3
+      bindings:
+        input.destination:
+        channelName:
+          producer:
+          consumer:
+            #converterBeanName:
+            topic:
+
