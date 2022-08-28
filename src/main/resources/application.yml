@@ -1,0 +1,54 @@
+mdms:
+  events:
+    topic: ${TOPIC_AUTORENEWALEVENTCONSUMER:mdms.dev.auto-renewal} #topic in Confluent.io cluster
+    api: ${MDMS_EVENTS_API:default} #api that access to your Confluent.io cluster
+    secret: ${MDMS_EVENTS_SECRET:default}
+    bootstrapServer: ${MDMS_APP_BOOTSTRAP_SERVERS:default}
+
+spring:
+  application:
+    name: ${DMS_APPLICATION_NAME:mdms-auto-renewal}
+  profiles:
+    active: dev
+  cloud:
+    function:
+      definition: consumeAutoRenewalEvent
+    stream:
+      instanceCount: ${MDMS_APP_CONSUMER_INSTANCE_COUNT:1}
+      instanceIndex: ${MDMS_APP_CONSUMER_INSTANCE_INDEX:0}
+      bindings:
+        consumeAutoRenewalEvent-in-0:
+          destination: ${mdms.events.topic}
+          binder: mdmsKafka
+          consumer:
+            concurrency: ${MDMS_APP_CONSUMER_INSTANCE_CONCURRENCY:1}
+          group: ${spring.application.name}-${spring.profiles.active}-BE
+        orderBuySupplier-out-0:
+          destination: ${mdms.events.topic}
+      kafka:
+        binder:
+          auto-create-topics: false
+        bindings:
+          consumeAutoRenewalEvent-in-0:
+            consumer:
+              configuration:
+                max.poll.records: 1
+      binders:
+        mdmsKafka:
+          type: kafka
+          environment:
+            spring:
+              cloud:
+                stream:
+                  kafka:
+                    binder:
+                      brokers: ${mdms.events.bootstrapServer}
+                      configuration:
+                        message.max.bytes: 2097152
+                        key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                        value.deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+                        security.protocol: SASL_SSL
+                        sasl.mechanism: PLAIN
+                        sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${mdms.events.api}' password='${mdms.events.secret}';
+                        ssl.endpoint.identification.algorithm: https
+                      replicationFactor: 3
