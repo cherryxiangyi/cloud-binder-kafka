@@ -43,7 +43,7 @@ URL/Path signature : http://localhost:8080/api/v4/auto-renewal
 Header: Content-Type=application/json
 Body: raw
 ```
-```JSON
+```json
 {
   "iboNum": 9987654,
   "affNum": 10
@@ -60,4 +60,185 @@ Body: raw
 ......xx....done
 ```
 
+## Take a closer look into this project
+### Configuration to bind to Confluent.io
+#### application.yml file 
+**A) This part nothing special. Just declare the key-value pair properties to be used across the project and file.**
+
+```YAML
+mdms:
+  events:
+    topic: ${TOPIC_AUTORENEWALEVENTCONSUMER:mdms.dev.auto-renewal} #topic in Confluent.io cluster
+    api: ${MDMS_EVENTS_API:default} #api that access to your Confluent.io cluster
+    secret: ${MDMS_EVENTS_SECRET:default}
+    bootstrapServer: ${MDMS_APP_BOOTSTRAP_SERVERS:default}
+```
+- key-value : `mdms.events.topic=${TOPIC_AUTORENEWALEVENTCONSUMER:mdms.dev.auto-renewal}`
+- application trying to get environment variable `${TOPIC_AUTORENEWALEVENTCONSUMER}` , if can't find then will take the value set as `mdms.dev.auto-renewal`
+- to access this key just use `${mdms.events.topic}`
+
+**B) Let's take a look for kafka binder configuration**
+```yaml
+spring:
+  application:
+    name: ${DMS_APPLICATION_NAME:mdms-auto-renewal}
+  profiles:
+    active: dev
+  cloud:
+    function:
+      definition: consumeAutoRenewalEvent
+    stream:
+      instanceCount: ${MDMS_APP_CONSUMER_INSTANCE_COUNT:1}
+      instanceIndex: ${MDMS_APP_CONSUMER_INSTANCE_INDEX:0}
+      bindings:
+        consumeAutoRenewalEvent-in-0:
+          destination: ${mdms.events.topic}
+          binder: mdmsKafka
+          consumer:
+            concurrency: ${MDMS_APP_CONSUMER_INSTANCE_CONCURRENCY:1}
+          group: ${spring.application.name}-${spring.profiles.active}-BE
+        orderBuySupplier-out-0:
+          destination: ${mdms.events.topic}
+      kafka:
+        binder:
+          auto-create-topics: false
+        bindings:
+          consumeAutoRenewalEvent-in-0:
+            consumer:
+              configuration:
+                max.poll.records: 1
+      binders:
+        mdmsKafka:
+          type: kafka
+          environment:
+            spring:
+              cloud:
+                stream:
+                  kafka:
+                    binder:
+                      brokers: ${mdms.events.bootstrapServer}
+                      configuration:
+                        message.max.bytes: 2097152
+                        key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                        value.deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+                        security.protocol: SASL_SSL
+                        sasl.mechanism: PLAIN
+                        sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${mdms.events.api}' password='${mdms.events.secret}';
+                        ssl.endpoint.identification.algorithm: https
+                      replicationFactor: 3
+```
+- In order to bind a channel to Confluent.io topic , we need to have a function/method to be acting as that job 
+- Your class/java must have annotation `@Component` and your method/function must have annotation `@Bean`
+```java 
+@Component
+public class AutoRenewalConsumerConfig { 
+
+    @Bean
+    public Consumer<Message<byte[]>> consumeAutoRenewalEvent() {  //you notice "consumeAutoRenewalEvent" acting as function linked to your application.yaml file
+        return input -> {
+            //do something of your message
+        }
+}
+```
+- Configure your function/method name in your application.yml file. In this case is `consumeAutoRenewalEvent`
+```yaml
+  cloud:
+    function:
+      definition: consumeAutoRenewalEvent
+```
+- We need to bind it into a channel with standard convention naming . `<function_name>-<in|out>-<index>` , "in" to consume event, "out" to produce event to topic. So, in this case is `consumeAutoRenewalEvent-in-0`
+```yaml
+      bindings:
+        consumeAutoRenewalEvent-in-0:
+          destination: ${mdms.events.topic}
+          binder: mdmsKafka
+          consumer:
+            concurrency: ${MDMS_APP_CONSUMER_INSTANCE_CONCURRENCY:1}
+          group: ${spring.application.name}-${spring.profiles.active}-BE
+```
+- **destination** is to the topic in Confluent.io to bind with
+> :warning: **"bindings" node must be declared before "kafka" node for lower version of sprintboot,else you might hit topic exception error**
+- **binder** you can named it anything except reserved keyword "kafka" , this name will be used to config later below to tell application the Confluent.io cluster info.
+- **consumer** : any extra configuration during consume event
+- **group** : any name but sepecific here, Confluent.io will automatic create the group for you to be able to let your application to consume back the last event and continue from there.
+
+We now need to configure extra setting for the consume
+```yaml
+      kafka:
+        binder:
+          auto-create-topics: false
+        bindings:
+          consumeAutoRenewalEvent-in-0:
+            consumer:
+              configuration:
+                max.poll.records: 1
+```
+- For **binder** we configure not to auto create topic `auto-create-topics`, it should only bind to the topic we provided
+- Our channel name `consumeAutoRenewalEvent-in-0` to configure consume `max.poll.records`
+
+Now, it is time to tell about Confluent.io cluster info for connection
+```yaml
+      binders:
+        mdmsKafka:
+          type: kafka
+          environment:
+            spring:
+              cloud:
+                stream:
+                  kafka:
+                    binder:
+                      brokers: ${mdms.events.bootstrapServer}
+                      configuration:
+                        message.max.bytes: 2097152
+                        key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                        value.deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+                        security.protocol: SASL_SSL
+                        sasl.mechanism: PLAIN
+                        sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${mdms.events.api}' password='${mdms.events.secret}';
+                        ssl.endpoint.identification.algorithm: https
+                      replicationFactor: 3
+```
+- Remember we named it `mdmsKafka` as **binder** in the **bindings** section node. Hence, we now need to declare it here for extra info.
+- **type** : the machanism we are using here is **kfaka** . Others like Rabbit
+- **brokers** : your Confluent.io cluster bootstrap server url, usually with port 9092. Here we declare to read from top key-value pair setting.
+- **value.deserializer** : Confluent.io can accept any form, it doesn't really care your format/type. But, Java does, so we need to provide  deserializer
+- **sasl.jaas.config** : inside here you will provide your username and password
+- The above configuration you can find more info from Confluent.io https://cloud.spring.io/spring-cloud-stream-binder-kafka/spring-cloud-stream-binder-kafka.html
+
+**Let's setup producer** 
+Configure `application.yml` file to bind to same topic with a channel name, this channel name(can be any) but in your class must use the same .
+```yaml
+      bindings:
+        orderBuySupplier-out-0:
+          destination: ${mdms.events.topic}
+```
+In this case, we named the channel **out** as `orderBuySupplier-out-0` and bind to same topic (destination)
+
+In our java class can send the message to this channel
+```java
+//....
+    @Autowired
+    private StreamBridge streamBridge;
+    
+     @Override
+    public ResponseEntity<Event> produceEvent(@RequestBody AutoRenewalRequest autoRenewalRequest){
+        System.out.println("...xx...got data produceEvent:"+autoRenewalRequest);
+        Event event = new Event();
+       //...set up your event object
+       //...
+        try {
+            byte[] messageBody = objectMapper.writeValueAsBytes(event);
+            MessageHeaderAccessor headerAccessor = new MessageHeaderAccessor();
+            headerAccessor.setHeader(KafkaHeaders.TOPIC,eventTopic);
+
+            Message<byte[]> kafkaMessage =
+                    MessageBuilder.createMessage(messageBody,headerAccessor.getMessageHeaders());
+            streamBridge.send("orderBuySupplier-out-0", kafkaMessage); // we need to configure this channel
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return ResponseEntity.ok().body(event);
+    }
+  
+```
 
