@@ -16,4 +16,10 @@ Basic SpringBoot project to connect to kafka by using binder
 git clone https://github.com/cherryxiangyi/cloud-binder-kafka
 ```
 2. Open this project into your Intellij IDE
-3. 
+3. Browse to the main application java > click the "green play" button > edit configuration
+![alt text](https://github.com/cherryxiangyi/cloud-binder-kafka/blob/main/img/startSpringBoot.png?raw=true)
+4. Ensure to add the following environment variables to connect to your Confluent.io cluster
+- MDMS_APP_BOOTSTRAP_SERVERS = <your_confluent_cluster_url>:9092
+- MDMS_EVENTS_API = <api_key_to_connect_to_your_confluent_cluster>
+- MDMS_EVENTS_SECRET = <secret_key_to_connect_to_your_confluent_cluster>
+![alt text](https://github.com/cherryxiangyi/cloud-binder-kafka/blob/main/img/envVariables.png?raw=true)
