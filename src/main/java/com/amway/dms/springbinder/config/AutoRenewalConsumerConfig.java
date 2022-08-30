@@ -36,7 +36,7 @@ public class AutoRenewalConsumerConfig {
 
     }
 
-    @Bean
+    //@Bean
     public Consumer<Message<byte[]>> consumeAutoRenewalEvent() {  //you notice "orderConsume" acting as function linked to your application.yaml file
         return input -> {
             System.out.println("....consume got data ..xx..:"+ input);

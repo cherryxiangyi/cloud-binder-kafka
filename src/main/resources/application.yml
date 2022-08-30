@@ -11,28 +11,29 @@ spring:
   profiles:
     active: dev
   cloud:
-    function:
-      definition: consumeAutoRenewalEvent
+#    function:
+#      definition: consumeAutoRenewalEvent
     stream:
       instanceCount: ${MDMS_APP_CONSUMER_INSTANCE_COUNT:1}
       instanceIndex: ${MDMS_APP_CONSUMER_INSTANCE_INDEX:0}
       bindings:
-        consumeAutoRenewalEvent-in-0:
-          destination: ${mdms.events.topic}
-          binder: mdmsKafka
-          consumer:
-            concurrency: ${MDMS_APP_CONSUMER_INSTANCE_CONCURRENCY:1}
-          group: ${spring.application.name}-${spring.profiles.active}-BE
+#        consumeAutoRenewalEvent-in-0:
+#          destination: ${mdms.events.topic}
+#          binder: mdmsKafka
+#          consumer:
+#            concurrency: ${MDMS_APP_CONSUMER_INSTANCE_CONCURRENCY:1}
+#          group: ${spring.application.name}-${spring.profiles.active}-BE
         orderBuySupplier-out-0:
           destination: ${mdms.events.topic}
+          binder: mdmsKafka
       kafka:
         binder:
           auto-create-topics: false
-        bindings:
-          consumeAutoRenewalEvent-in-0:
-            consumer:
-              configuration:
-                max.poll.records: 1
+#        bindings:
+#          consumeAutoRenewalEvent-in-0:
+#            consumer:
+#              configuration:
+#                max.poll.records: 1
       binders:
         mdmsKafka:
           type: kafka
